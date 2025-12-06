@@ -5,6 +5,7 @@ import java.util.Map;
 import accounts.Account;
 import accounts.CheckingAccount;
 import accounts.SavingsAccount;
+import interest.SimpleInterestStrategy;
 import notifications.EmailNotifier;
 import notifications.SMSNotifier;
 
@@ -36,7 +37,7 @@ public class BankFacade {
         switch (type.toLowerCase()) {
             case "savings":
                 // Savings account with a default interest rate of 3.0%
-                newAccount = new SavingsAccount(accountNumber, owner, initialBalance, 3.0);
+                newAccount = new SavingsAccount(accountNumber, owner, initialBalance, 3.0, new SimpleInterestStrategy());
                 break;
             case "checking":
                 // Checking account with a default overdraft limit of 1000.0
