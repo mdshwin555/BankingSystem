@@ -62,6 +62,7 @@ public class Account implements AccountComponent{
     /**
      * Deposits money into the account.
      * Triggers a notification and logs the transaction.
+     * 
      */
     public void deposit(double amount) {
         if (amount > 0) {
