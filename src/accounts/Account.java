@@ -3,6 +3,9 @@ package accounts;
 import java.util.ArrayList;
 import java.util.List;
 import notifications.NotificationObserver;
+import java.util.List;
+import notifications.NotificationObserver;
+import accounts.AccountComponent;
 
 /**
  * Account Class
@@ -12,7 +15,7 @@ import notifications.NotificationObserver;
  * Maintains a list of observers and notifies them of any state changes (deposit/withdraw).
  * Also handles **Audit Logging** for transaction history.
  */
-public class Account {
+public class Account implements AccountComponent{
     protected String accountNumber;
     protected double balance;
     protected String ownerName;
@@ -59,6 +62,7 @@ public class Account {
     /**
      * Deposits money into the account.
      * Triggers a notification and logs the transaction.
+     * 
      */
     public void deposit(double amount) {
         if (amount > 0) {
@@ -103,6 +107,18 @@ public class Account {
 
     public double getBalance() {
         return balance;
+    }
+
+    @Override // Implementing methods from AccountComponent
+    public void addComponent(AccountComponent component) {
+        // A Leaf node cannot have children.
+        throw new UnsupportedOperationException("Individual accounts cannot have sub-components.");
+    }
+
+    @Override
+    public void removeComponent(AccountComponent component) {
+        // A Leaf node cannot have children.
+        throw new UnsupportedOperationException("Individual accounts cannot have sub-components.");
     }
 
     public String getAccountNumber() {
