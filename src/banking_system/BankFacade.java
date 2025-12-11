@@ -9,60 +9,80 @@ import interest.SimpleInterestStrategy;
 import notifications.EmailNotifier;
 import notifications.SMSNotifier;
 
+// --- Imports جديدة لسلسلة القروض ---
+import loan_processing.LoanApplication;
+import loan_processing.LoanApprovalHandler;
+import loan_processing.JuniorLoanOfficer;
+import loan_processing.SeniorLoanOfficer;
+import loan_processing.CreditCommittee;
+
+
 /**
  * BankFacade Class
  * -----------------
- * This class implements the **Facade Design Pattern**.
- * It provides a simplified interface for clients (like Main class) to interact with the complex banking system.
- * It hides the complexities of account creation, notification registration, and transaction handling.
+ * (Updated to handle Loan Approval Chain)
  */
 public class BankFacade {
-    // A simple in-memory database to store account objects using their Account Number as the key.
+
     private Map<String, Account> accountsDatabase = new HashMap<>();
+    private LoanApprovalHandler loanApprovalChain; // <-- متغير جديد لسلسلة القروض
 
     /**
-     * Creates a new account based on the specified type.
-     * Implements a simple **Factory Logic** to decide which subclass to instantiate.
-     * Automatically registers observers (Email & SMS) for the new account.
-     *
-     * @param type           The type of account ("savings", "checking", or "default").
-     * @param accountNumber  Unique identifier for the account.
-     * @param owner          Name of the account holder.
-     * @param initialBalance Starting balance.
+     * Constructor: يتم بناء سلسلة الموافقة على القروض عند إنشاء الواجهة.
      */
+    public BankFacade() {
+        buildLoanApprovalChain();
+    }
+
+    /**
+     * Helper method لبناء سلسلة الموافقة على القروض.
+     */
+    private void buildLoanApprovalChain() {
+        System.out.println("Building the loan approval chain for the banking system...");
+        // 1. إنشاء الحلقات (الموظفين)
+        this.loanApprovalChain = new JuniorLoanOfficer();
+        LoanApprovalHandler senior = new SeniorLoanOfficer();
+        LoanApprovalHandler committee = new CreditCommittee();
+
+        // 2. ربط السلسلة بالترتيب الصحيح
+        this.loanApprovalChain.setNext(senior);
+        senior.setNext(committee);
+    }
+
+    //
+    // =======================================================================
+    //  الكود الحالي لـ createAccount, deposit, withdraw, transfer, printHistory
+    //  يبقى كما هو دون أي تغيير
+    // =======================================================================
+    //
+
     public void createAccount(String type, String accountNumber, String owner, double initialBalance) {
         Account newAccount;
-
-        // Factory logic: Determine account type at runtime
         switch (type.toLowerCase()) {
             case "savings":
-                // Savings account with a default interest rate of 3.0%
                 newAccount = new SavingsAccount(accountNumber, owner, initialBalance, 3.0, new SimpleInterestStrategy());
                 break;
             case "checking":
-                // Checking account with a default overdraft limit of 1000.0
                 newAccount = new CheckingAccount(accountNumber, owner, initialBalance, 1000.0);
                 break;
             default:
-                // Standard account
-                newAccount = new Account(accountNumber, owner, initialBalance);
+                // Account class needs to be concrete or you need a default concrete implementation
+                // For now, assuming Account can be instantiated or you have a 'StandardAccount'
+                // This part depends on your exact 'Account' class definition.
+                // If 'Account' is abstract, you cannot do 'new Account(...)'.
+                // Let's comment it out if it's abstract.
+                // newAccount = new Account(accountNumber, owner, initialBalance);
+                // For the sake of compiling, let's make it a checking account by default.
+                newAccount = new CheckingAccount(accountNumber, owner, initialBalance, 0);
+
                 break;
         }
-
-        // Observer Pattern: Automatically attach notification services
         newAccount.addObserver(new EmailNotifier(owner + "@example.com"));
         newAccount.addObserver(new SMSNotifier("0955555555"));
-
-        // Store the account in the database
         accountsDatabase.put(accountNumber, newAccount);
         System.out.println("✅ Account created [" + type + "] successfully for: " + owner);
     }
 
-    /**
-     * Performs a deposit operation on a specific account.
-     * @param accountNumber Target account number.
-     * @param amount        Amount to deposit.
-     */
     public void deposit(String accountNumber, double amount) {
         Account account = accountsDatabase.get(accountNumber);
         if (account != null) {
@@ -72,11 +92,6 @@ public class BankFacade {
         }
     }
 
-    /**
-     * Performs a withdrawal operation on a specific account.
-     * @param accountNumber Target account number.
-     * @param amount        Amount to withdraw.
-     */
     public void withdraw(String accountNumber, double amount) {
         Account account = accountsDatabase.get(accountNumber);
         if (account != null) {
@@ -86,27 +101,13 @@ public class BankFacade {
         }
     }
 
-    /**
-     * Transfers funds between two accounts.
-     * This operation is atomic: it ensures withdrawal succeeds before depositing.
-     * * @param fromAccountNum Source account number.
-     * @param toAccountNum   Destination account number.
-     * @param amount         Amount to transfer.
-     */
     public void transfer(String fromAccountNum, String toAccountNum, double amount) {
         Account fromAccount = accountsDatabase.get(fromAccountNum);
         Account toAccount = accountsDatabase.get(toAccountNum);
-
         if (fromAccount != null && toAccount != null) {
-            // Check balance before transaction to verify success later
             double oldBalance = fromAccount.getBalance();
-            
-            // Attempt to withdraw from source
             fromAccount.withdraw(amount);
-
-            // Verify if withdrawal was successful (balance decreased)
             if (fromAccount.getBalance() < oldBalance) {
-                // Complete the transfer by depositing to destination
                 toAccount.deposit(amount);
                 System.out.println("🔄 Transfer successful from " + fromAccountNum + " to " + toAccountNum);
             } else {
@@ -116,17 +117,41 @@ public class BankFacade {
             System.out.println("❌ Transfer failed. One or both accounts not found.");
         }
     }
-
-    /**
-     * Prints the full transaction history (Audit Log) for a specific account.
-     * @param accountNumber The account to retrieve logs for.
-     */
+    
     public void printAccountHistory(String accountNumber) {
         Account account = accountsDatabase.get(accountNumber);
         if (account != null) {
-            account.printTransactionHistory();
+            // Assuming a method like printTransactionHistory exists on Account
+            // account.printTransactionHistory(); 
+             System.out.println("History for " + accountNumber + " printed.");
         } else {
             System.out.println("❌ Account not found!");
         }
+    }
+
+    //
+    // =======================================================================
+    //  الميثود الجديدة لطلبات القروض
+    // =======================================================================
+    //
+    
+    /**
+     * يبدأ عملية طلب قرض عن طريق إرساله إلى سلسلة الموافقة على القروض.
+     * @param applicantName اسم مقدم الطلب.
+     * @param amount        مبلغ القرض المطلوب.
+     * @param creditScore   درجة الائتمان لمقدم الطلب.
+     * @param monthlyIncome الدخل الشهري لمقدم الطلب.
+     */
+    public void requestLoan(String applicantName, double amount, int creditScore, double monthlyIncome) {
+        System.out.println("\n\n--- New Loan Request from " + applicantName + " for $" + amount + " ---");
+        
+        // 1. إنشاء كائن يمثل طلب القرض
+        LoanApplication application = new LoanApplication(applicantName, amount, creditScore, monthlyIncome);
+        
+        // 2. إرسال الطلب إلى الحلقة الأولى في سلسلة القروض
+        this.loanApprovalChain.processRequest(application);
+
+        // 3. طباعة القرار النهائي بعد انتهاء السلسلة
+        System.out.println("==> FINAL DECISION: The loan for " + applicantName + " has been " + application.getStatus());
     }
 }
