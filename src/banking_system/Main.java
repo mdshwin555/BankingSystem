@@ -89,8 +89,7 @@ public class Main {
         System.out.println("Global Transfer Status: " + (transferSuccess ? "SUCCESS" : "FAILURE"));
 
         System.out.println("\n========== 💡 Testing Strategy Pattern (Interest Calculation) ==========");
-
-        // 1. Create a Savings Account using Simple Interest Strategy
+// 1. Create a Savings Account using Simple Interest Strategy
         SavingsAccount ahmedSavings = new SavingsAccount("SAV-A77", "Ahmed S", 10000.0, 5.0, new SimpleInterestStrategy());
 
         System.out.println("\n[Test 8.1] Applying Simple Interest (Balance: 10000, Rate: 5%):");
