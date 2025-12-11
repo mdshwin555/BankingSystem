@@ -1,8 +1,6 @@
 package banking_system;
 
-import accounts.Account;
-import accounts.AccountGroup;
-import accounts.SavingsAccount;
+import accounts.*;
 import interest.CompoundInterestStrategy;
 import interest.SimpleInterestStrategy;
 import transactions.ExternalTransferGateway;
@@ -107,5 +105,33 @@ public class Main {
         ahmedSavings.addInterest(); // Interest = 10500 * (1.05 - 1) = 525.0
 
         System.out.println("\nFinal Balance for Ahmed S: " + ahmedSavings.getBalance());
+
+
+        System.out.println("\n--- 3. Testing Decorator Pattern (Fees on Overdraft) ---");
+
+        // 1. إنشاء حساب تدقيق (CheckingAccount) لديه بالفعل منطق السحب على المكشوف (limit 1000.0)
+        CheckingAccount chkAccount = new CheckingAccount("CHK-D99", "Sarah D", 1500.0, 1000.0);
+
+        // 2. تزيين هذا الحساب بإضافة رسوم 50.0 عند استخدام السحب على المكشوف
+        AccountComponent decoratedAccountWithFee = new OverdraftProtectionDecorator(chkAccount, 50.0);
+
+        System.out.println("\n[Test 9.1] Withdrawal 500 (No Overdraft):");
+        decoratedAccountWithFee.withdraw(500.0);
+        // الرصيد: 1500 - 500 = 1000.0 (لا رسوم)
+
+        System.out.println("\n[Test 9.2] Withdrawal 1200 (Uses Overdraft):");
+        decoratedAccountWithFee.withdraw(1200.0);
+        // 1. السحب الأساسي: 1000 - 1200 = -200.0
+        // 2. المُزيّن يرى أن الرصيد أصبح سلبياً (-200.0 < 0)
+        // 3. المُزيّن يضيف رسوم 50.0: -200.0 - 50.0 = -250.0
+
+        System.out.println("\nFinal Balance for Sarah D: " + decoratedAccountWithFee.getBalance());
+
+        // يمكنك أيضاً تزيينها بـ PremiumServiceDecorator:
+        AccountComponent fullyDecorated = new PremiumServiceDecorator(decoratedAccountWithFee);
+
+        System.out.println("\n[Test 9.3] Deposit with Premium Service:");
+        fullyDecorated.deposit(500.0);
+        // الرصيد: -250 + 500 = 250.0
     }
 }
