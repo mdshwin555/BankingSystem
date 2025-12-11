@@ -1,6 +1,5 @@
 package accounts;
 
-
 public interface AccountComponent {
         // Operations applicable to both individual accounts and groups
         void deposit(double amount);
