@@ -19,7 +19,7 @@ public class Account implements AccountComponent{
     protected String accountNumber;
     protected double balance;
     protected String ownerName;
-    
+    private AccountState currentState;
     // Stores the history of all transactions (Audit Log)
     protected List<String> transactionHistory = new ArrayList<>();
     
@@ -32,6 +32,7 @@ public class Account implements AccountComponent{
         this.balance = initialBalance;
         // Log the creation of the account
         addTransaction("Initial Balance: " + initialBalance);
+        this.currentState = new ActiveState();
     }
 
     /**
@@ -64,6 +65,13 @@ public class Account implements AccountComponent{
      * Triggers a notification and logs the transaction.
      * 
      */
+
+    public void setState(AccountState state) {
+        this.currentState = state;
+        System.out.println("🔄 Account " + accountNumber + " state changed to: " + state.getStateName());
+        addTransaction("State changed to " + state.getStateName());
+    }
+
     public void deposit(double amount) {
         if (amount > 0) {
             this.balance += amount;
@@ -92,6 +100,28 @@ public class Account implements AccountComponent{
             addTransaction("Failed Withdraw Attempt: " + amount);
         }
     }
+
+
+    protected void handleDeposit(double amount) {
+        if (amount > 0) {
+            this.balance += amount;
+            System.out.println(">> Deposit successful: " + amount);
+            addTransaction("Deposit: +" + amount + " | New Balance: " + balance);
+            notifyObservers("Deposit of " + amount + ". Current Balance: " + balance);
+        }
+    }
+
+    protected void handleWithdraw(double amount) {
+        if (amount > 0 && balance >= amount) {
+            this.balance -= amount;
+            System.out.println(">> Withdrawal successful: " + amount);
+            addTransaction("Withdraw: -" + amount + " | New Balance: " + balance);
+            notifyObservers("Withdrawal of " + amount + ". Current Balance: " + balance);
+        } else {
+            System.out.println(">> Insufficient balance!");
+        }
+    }
+    public String getStateName() { return currentState.getStateName(); }
 
     /**
      * Prints all recorded transactions for this account.
@@ -123,5 +153,14 @@ public class Account implements AccountComponent{
 
     public String getAccountNumber() {
         return accountNumber;
+    }
+
+    public void setOwnerName(String newName) {
+        this.ownerName = newName;
+        addTransaction("Owner name updated to: " + newName);
+    }
+
+    public String getOwnerName() {
+        return ownerName;
     }
 }
