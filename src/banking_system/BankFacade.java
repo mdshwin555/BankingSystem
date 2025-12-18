@@ -47,7 +47,7 @@ public class BankFacade {
                 account.withdraw(amount);
             } else {
                 // إذا فشل أي فحص في السلسلة
-                System.out.println("⛔ [System] Transaction BLOCKED by security policy.");
+                System.out.println("⛔️ [System] Transaction BLOCKED by security policy.");
             }
 
         } else {
@@ -203,7 +203,7 @@ public class BankFacade {
             return;
         }
 
-        System.out.println("\n--- 🛡️ Processing Closure for Account: " + accountNumber + " ---");
+        System.out.println("\n--- 🛡 Processing Closure for Account: " + accountNumber + " ---");
 
         // 1. منطق خاص بحساب القروض (تسوية الديون)
         if (account instanceof accounts.LoanAccount) {
