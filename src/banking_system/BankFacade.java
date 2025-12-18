@@ -2,174 +2,254 @@ package banking_system;
 
 import java.util.HashMap;
 import java.util.Map;
-import accounts.Account;
-import accounts.CheckingAccount;
-import accounts.SavingsAccount;
+
+import accounts.*;
 import interest.SimpleInterestStrategy;
 import notifications.EmailNotifier;
 import notifications.SMSNotifier;
+// 1. استيراد حزمة الأمان الجديدة
+import security.*;
+import transactions.DepositCommand;
+import transactions.TransactionCommand;
+import transactions.TransactionScheduler;
 
-// --- Imports لسلسلة موافقة المعاملات ---
-import transactions.approval_chain.ApprovalHandler;
-import transactions.approval_chain.AutoApprovalHandler;
-import transactions.approval_chain.ComplianceHandler;
-import transactions.approval_chain.ManagerApprovalHandler;
-import transactions.approval_chain.Transaction;
-
-// --- Imports لسلسلة موافقة القروض ---
-import loan_processing.LoanApplication;
-import loan_processing.LoanApprovalHandler;
-import loan_processing.JuniorLoanOfficer;
-import loan_processing.SeniorLoanOfficer;
-import loan_processing.CreditCommittee;
-
-/**
- * BankFacade Class
- * -----------------
- * (Updated to handle both Transaction and Loan Approval Chains)
- */
 public class BankFacade {
-
     private Map<String, Account> accountsDatabase = new HashMap<>();
-    
-    // السلاسل التي ستقوم بالمعالجة
-    private ApprovalHandler transactionApprovalChain; // <-- سلسلة موافقات المعاملات
-    private LoanApprovalHandler loanApprovalChain;      // <-- سلسلة موافقات القروض
 
-    /**
-     * Constructor: يتم بناء كل سلاسل الموافقة عند إنشاء الواجهة.
-     */
+    // 2. تعريف كائن يمثل بداية "سلسلة التحقق"
+    private TransactionHandler securityChain;
+    private TransactionScheduler scheduler = new TransactionScheduler();
+
     public BankFacade() {
-        buildTransactionApprovalChain(); // بناء سلسلة المعاملات
-        buildLoanApprovalChain();        // بناء سلسلة القروض
+        // 3. بناء السلسلة عند تشغيل البنك (Constructor)
+        TransactionHandler fraudCheck = new FraudCheckHandler();
+        TransactionHandler managerApproval = new ManagerApprovalHandler();
+
+        // ربط السلسلة: فحص الاحتيال -> ثم موافقة المدير
+        fraudCheck.setNextHandler(managerApproval);
+        this.securityChain = fraudCheck;
     }
+
+    // ... (باقي الدوال مثل createAccount تبقى كما هي) ...
 
     /**
-     * Helper method لبناء سلسلة الموافقة على المعاملات.
+     * تعديل دالة السحب لتستخدم نمط Chain of Responsibility
      */
-    private void buildTransactionApprovalChain() {
-        System.out.println("Building the transaction approval chain...");
-        this.transactionApprovalChain = new AutoApprovalHandler();
-        ApprovalHandler manager = new ManagerApprovalHandler();
-        ApprovalHandler compliance = new ComplianceHandler();
-        this.transactionApprovalChain.setNext(manager);
-        manager.setNext(compliance);
-    }
-    
-    /**
-     * Helper method لبناء سلسلة الموافقة على القروض.
-     */
-    private void buildLoanApprovalChain() {
-        System.out.println("Building the loan approval chain...");
-        this.loanApprovalChain = new JuniorLoanOfficer();
-        LoanApprovalHandler senior = new SeniorLoanOfficer();
-        LoanApprovalHandler committee = new CreditCommittee();
-        this.loanApprovalChain.setNext(senior);
-        senior.setNext(committee);
-    }
-
-    //
-    // --- الميثودات التي تم تعديلها لتستخدم سلسلة الموافقات ---
-    //
-    
-    public void deposit(String accountNumber, double amount) {
-        Account account = accountsDatabase.get(accountNumber);
-        if (account == null) {
-            System.out.println("❌ Account not found!");
-            return;
-        }
-
-        System.out.println("\n-> Initiating deposit of " + amount + " to " + accountNumber);
-        Transaction transaction = new Transaction(amount, "CASH_DEPOSIT", accountNumber);
-        this.transactionApprovalChain.process(transaction);
-
-        if (transaction.getStatus().contains("APPROVED")) {
-            System.out.println("==> Approval GRANTED. Processing deposit.");
-            account.deposit(amount);
-        } else {
-            System.out.println("==> Approval DENIED. Deposit cancelled.");
-        }
-    }
-
     public void withdraw(String accountNumber, double amount) {
         Account account = accountsDatabase.get(accountNumber);
-        if (account == null) {
-            System.out.println("❌ Account not found!");
-            return;
-        }
+        if (account != null) {
 
-        System.out.println("\n-> Initiating withdrawal of " + amount + " from " + accountNumber);
-        Transaction transaction = new Transaction(amount, accountNumber, "CASH_WITHDRAWAL");
-        this.transactionApprovalChain.process(transaction);
+            System.out.println("\n🔍 [System] Security Check for Account: " + accountNumber);
 
-        if (transaction.getStatus().contains("APPROVED")) {
-            System.out.println("==> Approval GRANTED. Processing withdrawal.");
-            account.withdraw(amount);
+            // 4. التعديل الجوهري: نمرر الطلب للسلسلة أولاً
+            // إذا أعادت السلسلة true يعني أن كل الفحوصات (احتيال، مدير) تمت بنجاح
+            if (securityChain.handle(account, amount)) {
+                account.withdraw(amount);
+            } else {
+                // إذا فشل أي فحص في السلسلة
+                System.out.println("⛔️ [System] Transaction BLOCKED by security policy.");
+            }
+
         } else {
-            System.out.println("==> Approval DENIED. Withdrawal cancelled.");
+            System.out.println("❌ Account not found!");
         }
     }
 
+    /**
+     * Creates a new account based on the specified type.
+     * Implements a simple **Factory Logic** to decide which subclass to instantiate.
+     * Automatically registers observers (Email & SMS) for the new account.
+     *
+     * @param type           The type of account ("savings", "checking", or "default").
+     * @param accountNumber  Unique identifier for the account.
+     * @param owner          Name of the account holder.
+     * @param initialBalance Starting balance.
+     */
+    public void createAccount(String type, String accountNumber, String owner, double initialBalance) {
+        Account newAccount;
+
+        // Factory logic: Determine account type and instantiate the correct subclass.
+        switch (type.toLowerCase()) {
+            case "savings":
+                // افتراض استراتيجية فائدة بسيطة لعملية الإنشاء
+                newAccount = new SavingsAccount(accountNumber, owner, initialBalance, 2.5, new SimpleInterestStrategy());
+                break;
+            case "checking":
+                // افتراض حد سحب على المكشوف 500.0 لعملية الإنشاء
+                newAccount = new CheckingAccount(accountNumber, owner, initialBalance, 500.0);
+                break;
+            case "loan": // حالة جديدة للقروض
+                // يتم اعتبار الرصيد الأولي هو قيمة القرض
+                newAccount = new LoanAccount(accountNumber, owner, initialBalance);
+                break;
+            case "investment": // حالة جديدة للاستثمار
+                // افتراض مستوى مخاطر "Medium" لعملية الإنشاء
+                newAccount = new InvestmentAccount(accountNumber, owner, initialBalance, "Medium");
+                break;
+            case "default":
+            default:
+                newAccount = new Account(accountNumber, owner, initialBalance);
+                break;
+        }
+
+        accountsDatabase.put(accountNumber, newAccount);
+        System.out.println("✅ Account created: " + type.toUpperCase() + " (" + accountNumber + ")");
+
+        // Register default observers (Observer Pattern)
+        newAccount.addObserver(new EmailNotifier(owner.toLowerCase().replace(" ", "") + "@bank.com"));
+        newAccount.addObserver(new SMSNotifier("055xxxxxxx"));
+    }
+
+    /**
+     * Performs a deposit operation on a specific account.
+     * @param accountNumber Target account number.
+     * @param amount        Amount to deposit.
+     */
+    public void deposit(String accountNumber, double amount) {
+        Account account = accountsDatabase.get(accountNumber);
+        if (account != null) {
+            account.deposit(amount);
+        } else {
+            System.out.println("❌ Account not found!");
+        }
+    }
+
+    /**
+     * Performs a withdrawal operation on a specific account.
+     * @param accountNumber Target account number.
+     * @param amount        Amount to withdraw.
+     */
+//    public void withdraw(String accountNumber, double amount) {
+//        Account account = accountsDatabase.get(accountNumber);
+//        if (account != null) {
+//            account.withdraw(amount);
+//        } else {
+//            System.out.println("❌ Account not found!");
+//        }
+//    }
+
+    /**
+     * Transfers funds between two accounts.
+     * This operation is atomic: it ensures withdrawal succeeds before depositing.
+     * * @param fromAccountNum Source account number.
+     * @param toAccountNum   Destination account number.
+     * @param amount         Amount to transfer.
+     */
     public void transfer(String fromAccountNum, String toAccountNum, double amount) {
         Account fromAccount = accountsDatabase.get(fromAccountNum);
         Account toAccount = accountsDatabase.get(toAccountNum);
-        if (fromAccount == null || toAccount == null) {
-            System.out.println("❌ Transfer failed. One or both accounts not found.");
-            return;
-        }
 
-        System.out.println("\n-> Initiating transfer of " + amount + " from " + fromAccountNum + " to " + toAccountNum);
-        Transaction transaction = new Transaction(amount, fromAccountNum, toAccountNum);
-        this.transactionApprovalChain.process(transaction);
-        
-        if (transaction.getStatus().contains("APPROVED")) {
-            System.out.println("==> Approval GRANTED. Processing transfer.");
-            // ملاحظة: من الأفضل أن تكون عملية السحب والإيداع التالية مضمونة
-            // لكن بما أننا حصلنا على الموافقة، سنفترض أنها ستنجح.
+        if (fromAccount != null && toAccount != null) {
+            // Check balance before transaction to verify success later
+            double oldBalance = fromAccount.getBalance();
+            
+            // Attempt to withdraw from source
             fromAccount.withdraw(amount);
-            toAccount.deposit(amount);
-            System.out.println("🔄 Transfer successful!");
+
+            // Verify if withdrawal was successful (balance decreased)
+            if (fromAccount.getBalance() < oldBalance) {
+                // Complete the transfer by depositing to destination
+                toAccount.deposit(amount);
+                System.out.println("🔄 Transfer successful from " + fromAccountNum + " to " + toAccountNum);
+            } else {
+                System.out.println("❌ Transfer failed. Insufficient funds or limit exceeded.");
+            }
         } else {
-            System.out.println("==> Approval DENIED. Transfer cancelled.");
+            System.out.println("❌ Transfer failed. One or both accounts not found.");
         }
     }
 
-    //
-    // --- باقي الميثودات تبقى كما هي دون تغيير ---
-    //
-
-    public void createAccount(String type, String accountNumber, String owner, double initialBalance) {
-        Account newAccount;
-        switch (type.toLowerCase()) {
-            case "savings":
-                newAccount = new SavingsAccount(accountNumber, owner, initialBalance, 3.0, new SimpleInterestStrategy());
-                break;
-            case "checking":
-                newAccount = new CheckingAccount(accountNumber, owner, initialBalance, 1000.0);
-                break;
-            default:
-                newAccount = new CheckingAccount(accountNumber, owner, initialBalance, 0);
-                break;
-        }
-        newAccount.addObserver(new EmailNotifier(owner + "@example.com"));
-        newAccount.addObserver(new SMSNotifier("0955555555"));
-        accountsDatabase.put(accountNumber, newAccount);
-        System.out.println("✅ Account created [" + type + "] successfully for: " + owner);
-    }
-    
+    /**
+     * Prints the full transaction history (Audit Log) for a specific account.
+     * @param accountNumber The account to retrieve logs for.
+     */
     public void printAccountHistory(String accountNumber) {
         Account account = accountsDatabase.get(accountNumber);
         if (account != null) {
-             System.out.println("History for " + accountNumber + " printed.");
+            account.printTransactionHistory();
         } else {
             System.out.println("❌ Account not found!");
         }
     }
 
-    public void requestLoan(String applicantName, double amount, int creditScore, double monthlyIncome) {
-        System.out.println("\n\n--- New Loan Request from " + applicantName + " for $" + amount + " ---");
-        LoanApplication application = new LoanApplication(applicantName, amount, creditScore, monthlyIncome);
-        this.loanApprovalChain.processRequest(application);
-        System.out.println("==> FINAL DECISION: The loan for " + applicantName + " has been " + application.getStatus());
+    public Account getAccount(String accountNumber) {
+        // بما أن AccountGroup لا يتم تخزينه في accountsDatabase، يجب أن تعيد الدالة حساباً فردياً
+        return accountsDatabase.get(accountNumber);
+    }
+
+    // أضف هذه الدوال داخل فئة BankFacade
+
+    /**
+     * تحديث معلومات صاحب الحساب
+     */
+    public void updateAccountInfo(String accountNumber, String newName) {
+        Account account = accountsDatabase.get(accountNumber);
+        if (account != null) {
+            account.setOwnerName(newName);
+            System.out.println("📝 Account " + accountNumber + " updated. New owner: " + newName);
+        } else {
+            System.out.println("❌ Account not found for update.");
+        }
+    }
+
+    /**
+     * إغلاق الحساب مع منطق مخصص حسب النوع
+     */
+    public void closeAccount(String accountNumber) {
+        Account account = accountsDatabase.get(accountNumber);
+
+        if (account == null) {
+            System.out.println("❌ Error: Account " + accountNumber + " not found.");
+            return;
+        }
+
+        System.out.println("\n--- 🛡 Processing Closure for Account: " + accountNumber + " ---");
+
+        // 1. منطق خاص بحساب القروض (تسوية الديون)
+        if (account instanceof accounts.LoanAccount) {
+            if (account.getBalance() > 0) {
+                System.out.println("❌ Cannot close Loan Account: Outstanding debt of " + account.getBalance() + " must be settled first.");
+                return;
+            }
+        }
+        // 2. منطق خاص بالحسابات العادية (سحب الرصيد المتبقي)
+        else {
+            double remainingBalance = account.getBalance();
+            if (remainingBalance > 0) {
+                System.out.println("💰 Withdrawing remaining balance: " + remainingBalance + " before closure.");
+                account.withdraw(remainingBalance);
+            }
+        }
+
+        // 3. الإغلاق النهائي (إزالته من قاعدة البيانات)
+        accountsDatabase.remove(accountNumber);
+        System.out.println("🔒 Account " + accountNumber + " has been successfully closed.");
+
+
+    }
+
+    public void freezeAccount(String accountNumber) {
+        Account acc = accountsDatabase.get(accountNumber);
+        if (acc != null) acc.setState(new FrozenState());
+    }
+
+    public void activateAccount(String accountNumber) {
+        Account acc = accountsDatabase.get(accountNumber);
+        if (acc != null) acc.setState(new ActiveState());
+    }
+
+    public void scheduleDeposit(String accountNumber, double amount) {
+        Account account = accountsDatabase.get(accountNumber);
+        if (account != null) {
+            TransactionCommand depositCmd = new DepositCommand(account, amount);
+            scheduler.scheduleTransaction(depositCmd);
+        } else {
+            System.out.println("❌ Account not found for scheduling.");
+        }
+    }
+
+    // دالة لتنفيذ كل ما هو مجدول (مثل دفعات نهاية الشهر)
+    public void executeAllScheduled() {
+        scheduler.runScheduledTransactions();
     }
 }

@@ -132,5 +132,95 @@ public class Main {
         System.out.println("\n[Test 9.3] Deposit with Premium Service:");
         fullyDecorated.deposit(500.0);
         // الرصيد: -250 + 500 = 250.0
+
+
+        System.out.println("\n--- 4. Testing Factory Logic (Loan & Investment Accounts) ---");
+
+        // [Test 10.1] Create a Loan Account (Principal: 5000.0)
+        bank.createAccount("loan", "LON-999", "Khaled M", 5000.0);
+
+        // [Test 10.2] Create an Investment Account
+        bank.createAccount("investment", "INV-100", "Lama H", 10000.0);
+
+        // استرجاع حساب القرض لإجراء اختبار السلوك
+        Account khaledLoan = bank.getAccount("LON-999");
+
+        if (khaledLoan != null) {
+            System.out.println("\n[Test 10.3] Loan Account: Attempting to Withdraw 1000.0");
+            khaledLoan.withdraw(1000.0); // يجب أن يفشل (منطق LoanAccount)
+
+            System.out.println("\n[Test 10.4] Loan Account: Making Payment (Deposit 500.0)");
+            khaledLoan.deposit(500.0); // يجب أن ينجح ويقلل رصيد القرض (منطق LoanAccount)
+
+            System.out.println("\n[Test 10.5] Final Status Check:");
+            System.out.println("Current Loan Balance (Liability): " + khaledLoan.getBalance());
+            // يجب أن يكون الرصيد 5000 - 500 = 4500
+        }
+
+
+        // في ملف Main.java - القسم 5
+        System.out.println("\n--- 5. Testing Modification & Closure ---");
+
+// [Test 11.1] تعديل اسم صاحب حساب
+        bank.updateAccountInfo("SAV-001", "Ahmad Al-Saeed");
+
+// [Test 11.2] محاولة إغلاق حساب قرض عليه ديون (يجب أن يفشل)
+        bank.closeAccount("LON-999"); // حساب خالد الذي أنشأناه سابقاً ورصيده 4500
+
+// [Test 11.3] تسوية القرض ثم إغلاقه
+        Account khaledLoan1 = bank.getAccount("LON-999");
+        khaledLoan1.deposit(4500.0); // سداد القرض بالكامل
+        bank.closeAccount("LON-999"); // الآن يجب أن ينجح الإغلاق
+
+// [Test 11.4] إغلاق حساب توفير فيه رصيد (يجب أن يسحب المال ثم يغلق)
+        bank.closeAccount("SAV-001");
+
+
+        System.out.println("\n--- 6. Testing State Pattern (Account Transitions) ---");
+
+// 1. تجميد حساب سامر
+        bank.freezeAccount("CHK-002");
+
+// 2. محاولة السحب من الحساب المجمد (يجب أن يفشل)
+        System.out.println("\n[Test 12.1] Attempting to withdraw from Frozen account:");
+        bank.withdraw("CHK-002", 100.0);
+
+// 3. محاولة الإيداع في الحساب المجمد (يجب أن ينجح)
+        System.out.println("\n[Test 12.2] Attempting to deposit into Frozen account:");
+        bank.deposit("CHK-002", 300.0);
+
+// 4. إعادة تفعيل الحساب والسحب منه
+        bank.activateAccount("CHK-002");
+        bank.withdraw("CHK-002", 100.0);
+
+
+        System.out.println("\n--- 7. Testing Chain of Responsibility (Security Checks) ---");
+
+// [Test 13.1] مبلغ صغير (يمر من كل الفحوصات)
+        System.out.println("\n[Test 13.1] Withdrawal of 100:");
+        bank.withdraw("CHK-002", 100.0);
+
+// [Test 13.2] مبلغ يحتاج موافقة مدير (> 5000)
+        System.out.println("\n[Test 13.2] Withdrawal of 6000 (Manager Approval):");
+        bank.withdraw("CHK-002", 6000.0);
+
+// [Test 13.3] مبلغ مشبوه جداً (> 10000)
+        System.out.println("\n[Test 13.3] Withdrawal of 15000 (Fraud Alert):");
+        bank.withdraw("CHK-002", 15000.0);
+
+        System.out.println("\n--- 8. Testing Command Pattern (Scheduled Transactions) ---");
+
+// [Test 14.1] جدولة عملية إيداع لحساب سامر
+        bank.scheduleDeposit("CHK-002", 500.0);
+
+        System.out.println("Current Balance before scheduled execution: " + bank.getAccount("CHK-002").getBalance());
+
+// [Test 14.2] تنفيذ العمليات المجدولة (كأننا في نهاية الشهر)
+        bank.executeAllScheduled();
+
+        System.out.println("Current Balance after scheduled execution: " + bank.getAccount("CHK-002").getBalance());
     }
+
+
+
 }
